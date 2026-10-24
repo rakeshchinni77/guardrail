@@ -36,6 +36,10 @@ class Settings(BaseSettings):
         default="INFO",
         description="Logging verbosity level",
     )
+    api_port: int = Field(
+        default=8080,
+        description="HTTP port for the FastAPI service",
+    )
 
     # Database Settings (Phase 2+)
     database_url: str | None = Field(
@@ -44,6 +48,10 @@ class Settings(BaseSettings):
     )
 
     # Celesto Sandbox Settings (Phase 3+)
+    celesto_provider: str = Field(
+        default="cloud",
+        description="Celesto provider: cloud or local",
+    )
     celesto_api_key: SecretStr | None = Field(
         default=None,
         description="Celesto Cloud API key for remote sandbox provisioning",
@@ -51,6 +59,22 @@ class Settings(BaseSettings):
     celesto_timeout_seconds: int = Field(
         default=60,
         description="Timeout bound for Celesto sandbox operations (must be positive)",
+    )
+    celesto_cli_path: str | None = Field(
+        default=None,
+        description="Optional explicit path to Celesto CLI executable",
+    )
+    celesto_boot_timeout_seconds: float = Field(
+        default=60.0,
+        description="Maximum seconds to wait for guest boot and readiness",
+    )
+    celesto_command_timeout_seconds: int = Field(
+        default=30,
+        description="Default maximum seconds to wait for guest command execution",
+    )
+    celesto_max_output_bytes: int = Field(
+        default=102400,
+        description="Maximum captured output bytes before safe truncation (default 100 KB)",
     )
 
     # LLM Settings (Phase 4+)
@@ -100,6 +124,16 @@ class Settings(BaseSettings):
             msg = f"celesto_timeout_seconds must be positive, got {value}."
             raise ValueError(msg)
         return value
+
+    @property
+    def sqlalchemy_database_url(self) -> str:
+        """Return database URL normalized for SQLAlchemy with psycopg 3 driver."""
+        if not self.database_url:
+            return "sqlite:///:memory:"
+        url = self.database_url
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + url[len("postgresql://") :]
+        return url
 
 
 @lru_cache(maxsize=1)

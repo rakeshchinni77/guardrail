@@ -1,0 +1,49 @@
+services:
+  ledger:
+    image: postgres:16-alpine
+    container_name: guardrail-ledger
+    environment:
+      POSTGRES_DB: ledger
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: ledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - ledger-data:/var/lib/postgresql/data
+      - ./seeds:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger -d ledger"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: guardrail-api
+    environment:
+      APP_NAME: GuardRail
+      APP_ENV: production
+      LOG_LEVEL: INFO
+      API_PORT: 8080
+      DATABASE_URL: postgresql://ledger:ledger@ledger:5432/ledger
+      CELESTO_PROVIDER: cloud
+    ports:
+      - "8080:8080"
+    depends_on:
+      ledger:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  ledger-data:
+    name: guardrail-ledger-data

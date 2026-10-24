@@ -9,7 +9,7 @@ description = "GuardRail: Prompt-Injection Exfiltration Lab & Defense Evaluator 
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-    { name = "GuardRail Engineering Team" }
+    { name = "Chinni Rakesh" }
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -20,14 +20,19 @@ classifiers = [
     "Topic :: Security",
 ]
 dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
     "pydantic>=2.7.0",
     "pydantic-settings>=2.2.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg[binary]>=3.1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
+    "httpx>=0.27.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -39,6 +44,9 @@ minversion = "8.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-ra -q --strict-markers"
+markers = [
+    "celesto_cloud: opt-in live Celesto Cloud microVM integration tests (consumes cloud credits)",
+]
 
 [tool.ruff]
 target-version = "py311"
@@ -54,7 +62,7 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
 ]
-ignore = []
+ignore = ["B008"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

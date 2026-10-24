@@ -34,6 +34,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.clean_checkout_test/
 
 # Environment and Secrets (CRITICAL)
 .env
@@ -69,18 +70,16 @@ Thumbs.db
 
 # Runtime logs and temporary artifacts
 *.log
-logs/*
+logs/*.log
+!logs/commands.jsonl
 !logs/.gitkeep
 
-# Evaluation output artifacts (keep .gitkeep, ignore raw runs during dev)
-reports/*
+# Deliverables, fixtures, scripts, and graded reports
+!reports/*.json
+!reports/*.jsonl
+!reports/*.md
 !reports/.gitkeep
-fixtures/clean/*
-!fixtures/clean/.gitkeep
-fixtures/pages/*
-!fixtures/pages/.gitkeep
-scripts/*
-!scripts/.gitkeep
-evidence/*
-!evidence/.gitkeep
-!evidence/README.md
+!fixtures/clean/*
+!fixtures/pages/*
+!scripts/*
+!evidence/*
