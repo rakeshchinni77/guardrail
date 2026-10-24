@@ -1,0 +1,17 @@
+{
+  "test_id": "test_cloud_0147ddeb",
+  "sandbox_name": "sbx-c6f5da8ce0",
+  "test_marker": "GUARDRAIL_PHASE3_READY_304995fa90",
+  "provider": "cloud",
+  "created_at": 1792828273.2252154,
+  "provider_id": "cmp_1b9624b6467e",
+  "readiness_duration_s": 5.47,
+  "command_duration_ms": 5382.41,
+  "guest_exit_code": 0,
+  "guest_stdout": "GUARDRAIL_PHASE3_READY_304995fa90",
+  "guest_stderr": "",
+  "deletion_success": true,
+  "verified_absent": true,
+  "cleanup_error": null,
+  "overall_status": "passed"
+}
