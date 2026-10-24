@@ -280,23 +280,6 @@ python scripts/audit_git_history.py
 
 ---
 
-## Demo Walkthrough
-
-A practical 3-minute presentation walkthrough is documented in [Demo Script](demo/DEMO_SCRIPT.md).
-
-### Walkthrough Sequence (3 Minutes)
-1. **0:00–0:20 | Introduction**: Problem statement, two-zone architecture, and threat model.
-2. **0:20–0:50 | Health & Enforcement**: Query `/health` and demonstrate HTTP 400 rejection when attempting host execution.
-3. **0:50–1:25 | Clean Research Task**: Execute clean fixture extraction (`clean-01.html`) and verify extracted facts with evidence spans.
-4. **1:25–2:00 | Adversarial Containment**: Execute prompt-injection fixture (`pi-02-canary-leak.html`), show policy block, and verify canary protection.
-5. **2:00–2:30 | Fault Recovery**: Trigger Step-7 schema fault and demonstrate deterministic `resume` recovery.
-6. **2:30–2:50 | Evaluation Metrics**: Review the 20-run reliability results and provenance labeling (`local_fake` vs. Celesto Cloud).
-7. **2:50–3:00 | Conclusion**: Verified outcomes and remaining limitations.
-
-> **Demo Video Status**: The recording script is complete at [demo/DEMO_SCRIPT.md](demo/DEMO_SCRIPT.md). The actual demonstration video (`demo/walkthrough.mp4`) has not yet been recorded and is outstanding for live presenter recording.
-
----
-
 ## Repository Structure
 
 ```text
