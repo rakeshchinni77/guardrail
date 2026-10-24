@@ -1,0 +1,6 @@
+{
+  "failed_step": 7,
+  "total_steps": 10,
+  "policy": "resume",
+  "rationale": "The resume recovery policy was chosen because the guest microVM and scratch workspace remain intact and uncorrupted following the synthetic step-7 schema transformation fault. Retaining the warm guest avoids incurring an additional VM boot-to-ready latency penalty, preserves prior step execution artifacts without duplication, and guarantees deterministic completion within the bounded 10-step workflow."
+}
