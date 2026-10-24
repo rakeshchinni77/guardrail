@@ -1,0 +1,122 @@
+{
+  "report_id": "concurrency_eval_phase8_master",
+  "timestamp": "2026-10-24T10:26:59.003382+00:00",
+  "execution_provenance": "local_fake",
+  "requested_concurrency": 5,
+  "observed_concurrency": 5,
+  "total_jobs": 6,
+  "unique_runs": 6,
+  "unique_sandboxes": 6,
+  "identifier_collisions": 0,
+  "successful_jobs": 5,
+  "failed_jobs": 1,
+  "timeouts": 0,
+  "cancellations": 0,
+  "cleanup_errors": 0,
+  "ledger_consistency_verified": true,
+  "latency_statistics": {
+    "median_seconds": 1.1612,
+    "p90_seconds": 1.437,
+    "min_seconds": 0.529,
+    "max_seconds": 1.437,
+    "sorted_durations_seconds": [
+      0.529,
+      0.542,
+      0.6661,
+      1.1612,
+      1.2348,
+      1.437
+    ]
+  },
+  "breakage_notes": "Under 5+ simultaneous concurrent guest executions with bounded ThreadPoolExecutor workers, zero identifier collisions were observed across sandbox names and run IDs. All sandboxes successfully executed and cleaned up to terminal status deleted without database deadlocks, foreign-key corruption, or cross-workspace state contamination.",
+  "provider_limitations": {
+    "real_cloud_concurrency": "not_measured",
+    "limitation_note": "Concurrent execution was evaluated locally using FakeCelestoClient with zero cloud credit consumption. Celesto Cloud multi-guest hypervisor isolation, host process scheduling, and CLI lock contention remain UNVERIFIED."
+  },
+  "jobs": [
+    {
+      "job_id": "job_concurrent_01",
+      "run_id": "run_concurrency_eval_phase8_master_job_concurrent_01_8fe1e1",
+      "sandbox_name": "sbx-3df12f80ff",
+      "started_at": "2026-10-24T10:26:57.550161+00:00",
+      "finished_at": "2026-10-24T10:26:58.216792+00:00",
+      "duration_seconds": 0.6661,
+      "status": "succeeded",
+      "workload_type": "clean_research_baseline",
+      "cleanup_status": "deleted",
+      "cleanup_error": null,
+      "error_message": null,
+      "provenance": "local_fake"
+    },
+    {
+      "job_id": "job_concurrent_02",
+      "run_id": "run_concurrency_eval_phase8_master_job_concurrent_02_6ce606",
+      "sandbox_name": "sbx-d877cf08eb",
+      "started_at": "2026-10-24T10:26:57.559075+00:00",
+      "finished_at": "2026-10-24T10:26:58.794423+00:00",
+      "duration_seconds": 1.2348,
+      "status": "succeeded",
+      "workload_type": "clean_research_network_policy",
+      "cleanup_status": "deleted",
+      "cleanup_error": null,
+      "error_message": null,
+      "provenance": "local_fake"
+    },
+    {
+      "job_id": "job_concurrent_03",
+      "run_id": "run_concurrency_eval_phase8_master_job_concurrent_03_06666d",
+      "sandbox_name": "sbx-d39a538403",
+      "started_at": "2026-10-24T10:26:57.561617+00:00",
+      "finished_at": "2026-10-24T10:26:58.722516+00:00",
+      "duration_seconds": 1.1612,
+      "status": "succeeded",
+      "workload_type": "step7_fault_recovery_resume",
+      "cleanup_status": "deleted",
+      "cleanup_error": null,
+      "error_message": null,
+      "provenance": "local_fake"
+    },
+    {
+      "job_id": "job_concurrent_04",
+      "run_id": "run_concurrency_eval_phase8_master_job_concurrent_04_cc3e20",
+      "sandbox_name": "sbx-d42b8c0bdb",
+      "started_at": "2026-10-24T10:26:57.563631+00:00",
+      "finished_at": "2026-10-24T10:26:58.106195+00:00",
+      "duration_seconds": 0.542,
+      "status": "succeeded",
+      "workload_type": "prompt_injection_containment",
+      "cleanup_status": "deleted",
+      "cleanup_error": null,
+      "error_message": null,
+      "provenance": "local_fake"
+    },
+    {
+      "job_id": "job_concurrent_05",
+      "run_id": "run_concurrency_eval_phase8_master_job_concurrent_05_15068a",
+      "sandbox_name": "sbx-3d54d19212",
+      "started_at": "2026-10-24T10:26:57.564611+00:00",
+      "finished_at": "2026-10-24T10:26:59.001699+00:00",
+      "duration_seconds": 1.437,
+      "status": "failed",
+      "workload_type": "planned_failure_no_retries",
+      "cleanup_status": "deleted",
+      "cleanup_error": null,
+      "error_message": "StepLimitExceededError: Exceeded max recovery retries (0).",
+      "provenance": "local_fake"
+    },
+    {
+      "job_id": "job_concurrent_06",
+      "run_id": "run_concurrency_eval_phase8_master_job_concurrent_06_541065",
+      "sandbox_name": "sbx-294bb83e6a",
+      "started_at": "2026-10-24T10:26:58.106195+00:00",
+      "finished_at": "2026-10-24T10:26:58.635418+00:00",
+      "duration_seconds": 0.529,
+      "status": "succeeded",
+      "workload_type": "clean_research_defense_in_depth",
+      "cleanup_status": "deleted",
+      "cleanup_error": null,
+      "error_message": null,
+      "provenance": "local_fake"
+    }
+  ]
+}
