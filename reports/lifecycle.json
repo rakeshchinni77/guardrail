@@ -1,0 +1,31 @@
+{
+  "cleanup_on_success": true,
+  "cleanup_on_failure": true,
+  "cleanup_on_interrupt": true,
+  "naming_convention": "^sbx-[a-z0-9]{8,}$",
+  "unique_naming": true,
+  "entropy_bits": 40,
+  "terminal_status_enforced": "deleted",
+  "zero_orphan_guarantee": true,
+  "verified_cloud_cleanups": [
+    {
+      "guest_id": "cmp_029fc9c8fb9a",
+      "source_task": "clean_task",
+      "terminal_status": "deleted",
+      "verified": true
+    },
+    {
+      "guest_id": "cmp_1505d7e685c3",
+      "source_task": "poisoned_task",
+      "terminal_status": "deleted",
+      "verified": true
+    }
+  ],
+  "cloud_inventory_note": "Phase 4 acceptance confirmed deletion of both test guests with explicit status 'deleted'. Broad zero-cloud-orphan claims are not made because celesto computer list --json output may be truncated.",
+  "local_fake_cleanups_tested": 26,
+  "evidence_sources": [
+    "tests/celesto_phase4_integration_result.json",
+    "reports/concurrency.json",
+    "reports/reliability.json"
+  ]
+}
