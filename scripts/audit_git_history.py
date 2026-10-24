@@ -51,6 +51,13 @@ def main() -> int:
                                 "celesto_api_key is not None",
                                 "celesto_api_key=None",
                                 "celesto_api_key=raw_secret",
+                                "self.settings.celesto_api_key",
+                                "SECRET_PATTERNS",
+                                "secret_patterns",
+                                '"celesto_api_key"',
+                                '"BEGIN RSA PRIVATE KEY"',
+                                '"BEGIN PRIVATE KEY"',
+                                '"BEGIN OPENSSH PRIVATE KEY"',
                             )
                         )
                         if not is_safe:
