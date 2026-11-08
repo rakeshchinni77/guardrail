@@ -1,0 +1,33 @@
+{
+  "capability_id": "persistence",
+  "name": "Celesto MicroVM Guest State & Scratch Filesystem Persistence",
+  "status": "VERIFIED",
+  "provider_architecture": {
+    "execution_model": "MicroVM persistent guest (lifetime='persistent')",
+    "isolation_type": "KVM/Firecracker hardware virtualization via vsock bridge",
+    "storage_scope": "Stateful root and scratch filesystem (/tmp/guardrail_workspace/) preserved across commands",
+    "lifecycle_model": "Survives process exit and mid-workflow faults without microVM reboot or re-provisioning"
+  },
+  "workflow_integration": {
+    "engine": "app.workflow.engine.TenStepWorkflowEngine",
+    "checkpoint_step": "Step 6 (Synthesize Draft Structure) writes /tmp/guardrail_workspace/persistence_manifest.json inside guest",
+    "fault_injection": "Step 7 (Transform Schema) raises SyntheticStep7Fault",
+    "recovery_evaluation": {
+      "resume_policy": "Reuses warm guest microVM; verifies /tmp/guardrail_workspace/persistence_manifest.json intact in Step 8",
+      "fresh_policy": "Tears down prior guest microVM and provisions fresh guest, proving state isolation"
+    },
+    "verification_step": "Step 8 (Apply Policy Checks) reads manifest via guest execution and verifies token integrity",
+    "ledger_audit_events": [
+      "sandbox.persistence.written",
+      "sandbox.persistence.verified"
+    ]
+  },
+  "architectural_boundary": {
+    "in_guest_persistence": "State resides strictly inside the guest microVM filesystem and memory",
+    "host_isolation": "Zero persistence data leaks into the host filesystem or unmanaged storage",
+    "containment_guarantee": "Fault recovery does not require re-executing untrusted page fetches or duplicating network side effects"
+  },
+  "test_suite": "tests/test_celesto_capabilities.py::TestCelestoPersistence",
+  "provenance": "verified_microvm_state_retention"
+}
+

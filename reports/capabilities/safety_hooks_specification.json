@@ -1,0 +1,32 @@
+{
+  "capability_id": "safety_hooks",
+  "name": "Celesto Native Command-Lifecycle Callbacks and Pre-Execution Veto",
+  "status": "VERIFIED",
+  "sdk_integration": {
+    "package": "celesto.callbacks",
+    "base_class": "celesto.callbacks.Callback",
+    "dispatcher_class": "celesto.callbacks.CallbackDispatcher",
+    "exception_class": "celesto.callbacks.CommandBlockedError",
+    "context_class": "celesto.callbacks.RunContext",
+    "guardrail_implementation": "app.sandbox.callbacks.CelestoSafetyHook"
+  },
+  "mechanism": {
+    "lifecycle_hook": "on_pre_run",
+    "veto_channel": "Raises celesto.callbacks.CommandBlockedError prior to transport transmission",
+    "interception_targets": [
+      "Destructive filesystem commands (e.g., rm -rf /, mkfs, > /dev/sda)",
+      "Canary secret exfiltration payloads (e.g., CANARY_SECRET token transmission)",
+      "Unauthorized network exfiltration utilities (e.g., curl -d, wget --post-data, nc -e)"
+    ],
+    "enforcement_point": "SandboxLifecycleManager.execute_command before CelestoClientInterface.run_command dispatch",
+    "ledger_audit_event": "sandbox.command.vetoed"
+  },
+  "architectural_boundary": {
+    "control_plane": "Safety hooks execute within the Celesto client control plane before wire serialization",
+    "data_plane": "MicroVM guest (Firecracker/vsock) receives zero payload bytes when veto is asserted",
+    "containment_guarantee": "Prevents prompt injection payload from triggering remote canary leakage or host/guest compromise"
+  },
+  "test_suite": "tests/test_celesto_capabilities.py::TestCelestoSafetyHooks",
+  "provenance": "implemented_native_sdk_integration"
+}
+

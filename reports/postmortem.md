@@ -56,9 +56,9 @@ Across 12 poisoned fixtures (`pi-01` through `pi-06`):
 
 ## 3. Workflow Latency & Lifecycle Timings
 
-- **Median Workflow Latency:** 0.0742s (average
+- **Median Workflow Latency:** 0.0887s (average
   of 10th and 11th sorted observations)
-- **P90 Workflow Latency:** 0.098s (obs 18 of 20 sorted)
+- **P90 Workflow Latency:** 0.1148s (obs 18 of 20 sorted)
 - **Boot-to-Ready Time:** Explicitly classified as `not_measured` because local
   fake adapters do not simulate physical hypervisor boot latency.
 - **Cost Accounting:** Total cloud cost classified as `not_measured` (0 credits).
