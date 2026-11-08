@@ -23,6 +23,14 @@ class EvaluationRunRecord(BaseModel):
     defense_profile: str = Field(..., description="Defense configuration used for this run")
     execution_target: str = Field("celesto_sandbox", description="Target execution environment")
     provenance: str = Field("local_fake", description="Provenance: local_fake | celesto_cloud")
+    sandbox_name: str | None = Field(
+        None, description="Unique sandbox identifier matching ^sbx-[a-z0-9]{8,}$"
+    )
+    fresh: bool = Field(True, description="Whether this is a fresh sandbox allocation")
+    success: bool | None = Field(None, description="Whether task succeeded")
+    wall_clock_s: float | None = Field(None, description="Total wall-clock duration in seconds")
+    boot_to_ready_s: float = Field(0.0, ge=0.0, description="Boot-to-ready duration in seconds")
+    cost_usd: float = Field(0.0, ge=0.0, description="Cost in USD")
 
     status: str = Field(..., description="Final status: succeeded | failed")
     workflow_duration_seconds: float = Field(..., ge=0.0, description="Total workflow duration")

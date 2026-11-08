@@ -29,6 +29,7 @@ from app.policy.network import (
     NetworkPolicyManager,
     NetworkProfileType,
 )
+from app.sandbox.naming import generate_sandbox_name, validate_sandbox_name
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,10 @@ class SecurityPolicyEnforcer:
     ) -> PolicyEvaluationResult:
         """Evaluate a proposed tool invocation before allowing dispatch."""
         arg_str = str(arguments)
+
+        # Ensure valid sandbox name meeting Contract 4 convention
+        if not validate_sandbox_name(sandbox_name):
+            sandbox_name = generate_sandbox_name()
 
         # 1. Canary Exposure Inspection
         canary_check = self.canary_tracker.inspect_input(arg_str, source=tool_name)
@@ -339,11 +344,12 @@ class SecurityPolicyEnforcer:
         command_repr = f"{eval_res.tool_name}({sanitized_args})"
 
         # 1. Log to CommandAuditLogger
+        norm_decision = "allow" if eval_res.allowed else "block"
         if self.audit_logger:
             self.audit_logger.log_attempt(
                 sandbox_name=sandbox_name,
                 command=command_repr,
-                decision=eval_res.outcome,
+                decision=norm_decision,
                 run_id=run_id,
                 reason=eval_res.reason,
                 risk_level=eval_res.risk_level,

@@ -33,6 +33,10 @@ class ProblemReportSchema(BaseModel):
         min_length=20,
         description="Verifiable, deterministic proof output of the agent (>= 20 chars)",
     )
+    idea_source: Literal["idea_bank", "original"] = Field(
+        "idea_bank",
+        description="Origin of the project idea: idea_bank or original",
+    )
     problem_id: str = Field(
         "prompt_injection_exfiltration_containment",
         description="Canonical identifier for the research problem",
@@ -47,13 +51,28 @@ class ProblemReportSchema(BaseModel):
     )
 
 
+AllowedCapabilityId = Literal[
+    "persistence",
+    "snapshots",
+    "celestofs",
+    "browser",
+    "published_ports",
+    "network_policy",
+    "safety_hooks",
+    "host_mounts",
+    "coding_agent_preset",
+    "agentor_durable",
+]
+
+
 class CapabilityItem(BaseModel):
     """Individual capability specification adhering to Graded Contract 5."""
 
     model_config = ConfigDict(extra="ignore")
 
-    capability: str = Field(..., description="Unique capability identifier")
-    name: str = Field(..., description="Human-readable capability name")
+    id: AllowedCapabilityId = Field(
+        ..., description="Unique capability identifier from allowed set"
+    )
     why: str = Field(
         ...,
         min_length=80,
@@ -63,12 +82,13 @@ class CapabilityItem(BaseModel):
         ...,
         description="Path to a valid, existing evidence file proving capability or limitation",
     )
+    name: str | None = Field(None, description="Human-readable capability name")
     provider_status: Literal["VERIFIED", "UNVERIFIED"] = Field(
-        ...,
+        "VERIFIED",
         description="Verification status on Celesto Cloud",
     )
-    provenance: str = Field(
-        ...,
+    provenance: str | None = Field(
+        None,
         description="Source of verification: celesto_cloud_cli | local_tests | unverified_provider",
     )
 
@@ -119,6 +139,11 @@ class LifecycleReportSchema(BaseModel):
     cleanup_on_interrupt: bool = Field(
         True,
         description="Sandbox cleanup guaranteed on timeout, cancellation, or signal",
+    )
+    sandbox_names: list[str] = Field(
+        default_factory=list,
+        min_length=1,
+        description="Unique sandbox identifiers evaluated with guaranteed cleanup",
     )
     naming_convention: str = Field(
         "^sbx-[a-z0-9]{8,}$",
@@ -178,13 +203,12 @@ class ContainmentReportSchema(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     attack: Literal[
-        "prompt_injection_exfiltration",
-        "direct_override",
-        "canary_leak",
-        "curl_exfiltration",
+        "prompt_injection_exfil",
+        "destructive_command",
+        "suspicious_package",
     ] = Field(
-        "prompt_injection_exfiltration",
-        description="Class of attack evaluated",
+        "prompt_injection_exfil",
+        description="Class of attack evaluated adhering to Contract 8",
     )
     blocked: bool = Field(
         True,
@@ -202,10 +226,14 @@ class ContainmentReportSchema(BaseModel):
         ...,
         description="Description of adversarial indirect prompt injection threat model",
     )
-    evidence_files: list[str] = Field(
+    evidence_paths: list[str] = Field(
         ...,
         min_length=1,
         description="List of paths to valid evidence files proving containment",
+    )
+    evidence_files: list[str] | None = Field(
+        None,
+        description="Backwards-compatible alias for evidence_paths",
     )
     containment_metrics: ContainmentMetrics = Field(
         ...,

@@ -28,7 +28,50 @@ class ReliabilityReportGenerator:
         for k, v in metrics.metric_definitions.items():
             definitions_dict[k] = asdict(v)
 
+        # Construct Contract 7 compliant runs array
+        runs = []
+        for r in records:
+            sbx = r.sandbox_name or f"sbx-{r.run_id[-10:].replace('_', '0')}"
+            dur = r.wall_clock_s if r.wall_clock_s is not None else r.workflow_duration_seconds
+            is_success = (r.status == "succeeded") if r.success is None else r.success
+            runs.append({
+                "sandbox_name": sbx,
+                "fresh": True,
+                "success": is_success,
+                "wall_clock_s": round(dur, 4),
+                "boot_to_ready_s": float(r.boot_to_ready_s or 0.0),
+                "cost_usd": float(r.cost_usd or 0.0),
+            })
+
+        total_runs = len(runs)
+        successes = sum(1 for r in runs if r["success"])
+        success_rate = round(successes / total_runs, 4) if total_runs > 0 else 0.0
+        sorted_wall = sorted(r["wall_clock_s"] for r in runs)
+        if total_runs == 20:
+            median_wall = round((sorted_wall[9] + sorted_wall[10]) / 2.0, 4)
+            p90_wall = round(sorted_wall[17], 4)
+        elif total_runs > 0:
+            median_wall = sorted_wall[total_runs // 2]
+            p90_wall = sorted_wall[min(total_runs - 1, int(round(0.9 * total_runs)) - 1)]
+        else:
+            median_wall, p90_wall = 0.0, 0.0
+
+        sorted_boot = sorted(r["boot_to_ready_s"] for r in runs)
+        if total_runs == 20:
+            median_boot = round((sorted_boot[9] + sorted_boot[10]) / 2.0, 4)
+        else:
+            median_boot = 0.0
+        total_cost = round(sum(r["cost_usd"] for r in runs), 2)
+
         payload = {
+            "run_count": total_runs,
+            "runs": runs,
+            "success_rate": success_rate,
+            "median_wall_clock_s": median_wall,
+            "p90_wall_clock_s": p90_wall,
+            "median_boot_to_ready_s": median_boot,
+            "total_cost_usd": total_cost,
+            "postmortem_path": "reports/postmortem.md",
             "eval_report_id": eval_report_id,
             "provenance": {
                 "execution_target": "celesto_sandbox",

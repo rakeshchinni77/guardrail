@@ -10,6 +10,12 @@ from datetime import UTC, datetime
 from app.config import Settings, get_settings
 from app.ledger.repository import LedgerRepository
 from app.ledger.schemas import EventCreate
+from app.sandbox.callbacks import (
+    CallbackDispatcher,
+    CelestoCallback,
+    CommandBlockedError,
+    RunContext,
+)
 from app.sandbox.client import CelestoClientInterface, sanitize_text
 from app.sandbox.exceptions import (
     GuestCommandExecutionError,
@@ -39,11 +45,17 @@ class SandboxLifecycleManager:
         settings: Settings | None = None,
         ledger_repo: LedgerRepository | None = None,
         max_output_bytes: int | None = None,
+        callbacks: list[CelestoCallback] | None = None,
     ) -> None:
         self.client = client
         self.settings = settings or get_settings()
         self.ledger_repo = ledger_repo
         self.max_output_bytes = max_output_bytes or self.settings.celesto_max_output_bytes
+        self.callbacks = CallbackDispatcher(callbacks or [])
+
+    def add_callback(self, callback: CelestoCallback) -> None:
+        """Register a command lifecycle callback."""
+        self.callbacks.add(callback)
 
     def _record_event(
         self, run_id: str | None, event_type: str, details: dict | None = None
@@ -235,6 +247,22 @@ class SandboxLifecycleManager:
             )
             raise HostExecutionForbiddenError(msg)
 
+        # Pre-execution callback / veto evaluation
+        ctx = RunContext(vm_id=handle.provider_id, command=command, timeout=timeout)
+        try:
+            self.callbacks.fire("on_pre_run", ctx, propagate=True)
+        except CommandBlockedError as veto_err:
+            self._record_event(
+                run_id,
+                "sandbox.command.vetoed",
+                {
+                    "provider_id": handle.provider_id,
+                    "command": sanitize_text(command),
+                    "reason": getattr(veto_err, "reason", str(veto_err)),
+                },
+            )
+            raise
+
         handle.state = "running"
         self._record_event(
             run_id,
@@ -281,6 +309,9 @@ class SandboxLifecycleManager:
                 output_truncated=output_truncated,
             )
 
+            ctx.result = cmd_result
+            self.callbacks.fire("on_post_run", ctx, propagate=False)
+
             event_type = (
                 "sandbox.command.completed" if exit_code == 0 else "sandbox.command.non_zero_exit"
             )
@@ -295,8 +326,10 @@ class SandboxLifecycleManager:
             )
             return cmd_result
 
-        except GuestCommandTimeoutError:
+        except GuestCommandTimeoutError as exc:
             duration_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+            ctx.error = exc
+            self.callbacks.fire("on_run_error", ctx, propagate=False)
             self._record_event(
                 run_id,
                 "sandbox.command.timeout",
@@ -305,6 +338,8 @@ class SandboxLifecycleManager:
             raise
         except Exception as exc:
             duration_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+            ctx.error = exc
+            self.callbacks.fire("on_run_error", ctx, propagate=False)
             self._record_event(
                 run_id,
                 "sandbox.command.failed",

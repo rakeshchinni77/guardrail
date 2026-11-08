@@ -1,5 +1,12 @@
 """GuardRail Sandbox execution and lifecycle subpackage (Phase 3)."""
 
+from app.sandbox.callbacks import (
+    CallbackDispatcher,
+    CelestoCallback,
+    CelestoSafetyHook,
+    CommandBlockedError,
+    RunContext,
+)
 from app.sandbox.client import CelestoCLIClient, CelestoClientInterface, FakeCelestoClient
 from app.sandbox.exceptions import (
     CelestoUnavailableError,
@@ -39,6 +46,11 @@ __all__ = [
     "SandboxHandle",
     "SandboxLifecycleManager",
     "SandboxReadinessTimeoutError",
+    "CallbackDispatcher",
+    "CelestoCallback",
+    "CelestoSafetyHook",
+    "CommandBlockedError",
+    "RunContext",
     "generate_sandbox_name",
     "validate_sandbox_name",
 ]

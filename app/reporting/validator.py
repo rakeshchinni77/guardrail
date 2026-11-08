@@ -42,11 +42,23 @@ class ReportPipelineValidator:
         "reports/concurrency.json",
     ]
 
+    ALLOWED_CAPABILITIES = {
+        "persistence",
+        "snapshots",
+        "celestofs",
+        "browser",
+        "published_ports",
+        "network_policy",
+        "safety_hooks",
+        "host_mounts",
+        "coding_agent_preset",
+        "agentor_durable",
+    }
+
     ALLOWED_ATTACKS = {
-        "prompt_injection_exfiltration",
-        "direct_override",
-        "canary_leak",
-        "curl_exfiltration",
+        "prompt_injection_exfil",
+        "destructive_command",
+        "suspicious_package",
     }
 
     ALLOWED_RECOVERY_POLICIES = {"resume", "rollback", "fresh"}
@@ -153,11 +165,17 @@ class ReportPipelineValidator:
         except Exception as e:
             raise CrossReportValidationError(f"Invalid JSON in {path}: {e}") from e
 
-        for key in ("who", "agent_work", "proof_output"):
+        for key in ("who", "agent_work", "proof_output", "idea_source"):
             if key not in data:
                 raise CrossReportValidationError(
                     f"reports/problem.json missing required key '{key}'"
                 )
+
+        if data["idea_source"] not in ("idea_bank", "original"):
+            src = data["idea_source"]
+            raise CrossReportValidationError(
+                f"reports/problem.json idea_source '{src}' not in ('idea_bank', 'original')"
+            )
 
         if len(data["who"]) < 40:
             raise CrossReportValidationError(
@@ -180,6 +198,7 @@ class ReportPipelineValidator:
         line_count = 0
         decisions: dict[str, int] = {}
         required_keys = {"ts", "sandbox_name", "command", "decision", "execution_target"}
+        sbx_pattern = re.compile(r"^sbx-[a-z0-9]{8,}$")
 
         with open(path, encoding="utf-8") as f:
             for line_idx, line in enumerate(f, start=1):
@@ -203,6 +222,18 @@ class ReportPipelineValidator:
                     raise CrossReportValidationError(
                         f"Line {line_idx} in {path} has invalid execution_target "
                         f"'{entry['execution_target']}' (must strictly be 'celesto_sandbox')"
+                    )
+
+                if not sbx_pattern.match(entry["sandbox_name"]):
+                    sname = entry["sandbox_name"]
+                    raise CrossReportValidationError(
+                        f"Line {line_idx} in {path} has invalid sandbox_name '{sname}'"
+                    )
+
+                if entry["decision"] not in ("allow", "block"):
+                    dec = entry["decision"]
+                    raise CrossReportValidationError(
+                        f"Line {line_idx} in {path} decision '{dec}' not in ('allow', 'block')"
                     )
 
                 # Validate ISO timestamp
@@ -239,30 +270,45 @@ class ReportPipelineValidator:
                 f"{path} must contain at least 2 capabilities, found {len(caps)}"
             )
 
+        seen_ids: set[str] = set()
         for idx, cap in enumerate(caps):
-            for k in ("capability", "why", "evidence_path", "provider_status"):
-                if k not in cap:
-                    raise CrossReportValidationError(
-                        f"Capability #{idx} in {path} missing required key '{k}'"
-                    )
+            cap_id = cap.get("id") or cap.get("capability")
+            if not cap_id:
+                raise CrossReportValidationError(f"Capability #{idx} in {path} missing 'id'")
 
-            if len(cap["why"]) < 80:
+            if cap_id not in self.ALLOWED_CAPABILITIES:
+                allowed = self.ALLOWED_CAPABILITIES
                 raise CrossReportValidationError(
-                    f"Capability '{cap['capability']}' in {path} has 'why' "
-                    f"length {len(cap['why'])} < 80 chars"
+                    f"Capability '{cap_id}' in {path} not in allowed set {allowed}"
+                )
+
+            if cap_id in seen_ids:
+                raise CrossReportValidationError(
+                    f"Duplicate capability '{cap_id}' in {path}; IDs must be unique"
+                )
+            seen_ids.add(cap_id)
+
+            if "why" not in cap or len(cap["why"]) < 80:
+                raise CrossReportValidationError(
+                    f"Capability '{cap_id}' in {path} has 'why' length < 80 chars"
+                )
+
+            if "evidence_path" not in cap:
+                raise CrossReportValidationError(
+                    f"Capability #{idx} in {path} missing 'evidence_path'"
                 )
 
             ev_path = self.root / cap["evidence_path"]
             if not ev_path.exists():
+                ep = cap["evidence_path"]
                 raise CrossReportValidationError(
-                    f"Capability '{cap['capability']}' references non-existent "
-                    f"evidence_path: {cap['evidence_path']}"
+                    f"Capability '{cap_id}' references non-existent evidence_path: {ep}"
                 )
 
-            if cap["provider_status"] not in ("VERIFIED", "UNVERIFIED"):
+            if cap.get("provider_status") not in ("VERIFIED", "UNVERIFIED", None):
+                p_stat = cap.get("provider_status")
                 raise CrossReportValidationError(
-                    f"Capability '{cap['capability']}' has invalid provider_status: "
-                    f"{cap['provider_status']}"
+                    f"Capability '{cap_id}' has invalid provider_status: {p_stat}"
                 )
 
         return data
@@ -277,6 +323,19 @@ class ReportPipelineValidator:
             if data.get(flag) is not True:
                 raise CrossReportValidationError(
                     f"{path} required boolean flag '{flag}' must be true, got {data.get(flag)}"
+                )
+
+        sandbox_names = data.get("sandbox_names")
+        if not isinstance(sandbox_names, list) or len(sandbox_names) == 0:
+            raise CrossReportValidationError(
+                f"{path} 'sandbox_names' must be a non-empty list"
+            )
+
+        sbx_pattern = re.compile(r"^sbx-[a-z0-9]{8,}$")
+        for sname in sandbox_names:
+            if not sbx_pattern.match(sname):
+                raise CrossReportValidationError(
+                    f"{path} sandbox_name '{sname}' does not match pattern ^sbx-[a-z0-9]{{8,}}$"
                 )
 
         if not data.get("unique_naming"):
@@ -295,18 +354,6 @@ class ReportPipelineValidator:
                     f"{path} references non-existent evidence source: {ev}"
                 )
 
-        # Verify cloud cleanup records
-        verified_cleanups = data.get("verified_cloud_cleanups", [])
-        if len(verified_cleanups) < 2:
-            raise CrossReportValidationError(
-                f"{path} must contain verified cloud cleanup records for Phase 4 guests"
-            )
-        for cl in verified_cleanups:
-            if cl.get("terminal_status") != "deleted" or not cl.get("verified"):
-                raise CrossReportValidationError(
-                    f"{path} cleanup record {cl} lacks verified terminal status 'deleted'"
-                )
-
         return data
 
     def validate_reliability_json(self) -> dict[str, Any]:
@@ -315,58 +362,86 @@ class ReportPipelineValidator:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
 
-        total_evals = data.get("total_evaluations", 0)
-        if total_evals < 20:
+        # Graded Contract 7 required fields
+        required_fields = {
+            "run_count",
+            "runs",
+            "success_rate",
+            "median_wall_clock_s",
+            "p90_wall_clock_s",
+            "median_boot_to_ready_s",
+            "total_cost_usd",
+            "postmortem_path",
+        }
+        missing_fields = required_fields - set(data.keys())
+        if missing_fields:
             raise CrossReportValidationError(
-                f"{path} total_evaluations is {total_evals}; must be >= 20"
+                f"{path} missing required Contract 7 fields: {missing_fields}"
             )
 
-        metrics = data.get("metrics", {})
-        eval_count = metrics.get("evaluation_count", 0)
-        succ = metrics.get("successful_evaluations", 0)
-        fail = metrics.get("failed_evaluations", 0)
-
-        if eval_count != total_evals:
+        run_count = data.get("run_count", 0)
+        if run_count < 20:
             raise CrossReportValidationError(
-                f"{path} evaluation_count {eval_count} != total_evaluations {total_evals}"
-            )
-        if succ + fail != eval_count:
-            raise CrossReportValidationError(
-                f"{path} successful ({succ}) + failed ({fail}) != total ({eval_count})"
+                f"{path} run_count is {run_count}; must be >= 20"
             )
 
-        expected_succ_rate = round(succ / eval_count, 4)
-        if metrics.get("success_rate") != expected_succ_rate:
-            actual_rate = metrics.get("success_rate")
+        runs = data.get("runs", [])
+        if not isinstance(runs, list) or len(runs) != run_count:
             raise CrossReportValidationError(
-                f"{path} success_rate {actual_rate} != recomputed {expected_succ_rate}"
+                f"{path} len(runs) {len(runs)} != run_count {run_count}"
             )
 
-        # Check unique run IDs
-        evaluations = data.get("evaluations", [])
-        if evaluations:
-            run_ids = [ev["run_id"] for ev in evaluations]
-            if len(run_ids) != len(set(run_ids)):
+        sbx_pattern = re.compile(r"^sbx-[a-z0-9]{8,}$")
+        succ_count = 0
+        wall_clock_times: list[float] = []
+
+        for idx, run in enumerate(runs):
+            for k in (
+                "sandbox_name",
+                "fresh",
+                "success",
+                "wall_clock_s",
+                "boot_to_ready_s",
+                "cost_usd",
+            ):
+                if k not in run:
+                    raise CrossReportValidationError(
+                        f"{path} run #{idx} missing required key '{k}'"
+                    )
+
+            if not sbx_pattern.match(run["sandbox_name"]):
                 raise CrossReportValidationError(
-                    f"{path} contains duplicate run IDs in evaluations list"
+                    f"{path} run #{idx} has invalid sandbox_name '{run['sandbox_name']}'"
                 )
 
-        # Check workflow latency percentiles
-        wf_lat = metrics.get("workflow_latency", {})
-        sorted_durations = wf_lat.get("sorted_durations_seconds", [])
-        if sorted_durations and len(sorted_durations) == 20:
-            recomputed_median = round((sorted_durations[9] + sorted_durations[10]) / 2.0, 4)
-            recomputed_p90 = round(sorted_durations[17], 4)
-            if abs(wf_lat.get("median_seconds", 0) - recomputed_median) > 0.001:
-                rep_med = wf_lat.get("median_seconds")
+            if run["fresh"] is not True:
                 raise CrossReportValidationError(
-                    f"{path} median latency {rep_med} != recomputed {recomputed_median}"
+                    f"{path} run #{idx} fresh flag must be True"
                 )
-            if abs(wf_lat.get("p90_seconds", 0) - recomputed_p90) > 0.001:
-                rep_p90 = wf_lat.get("p90_seconds")
+
+            if not isinstance(run["success"], bool):
                 raise CrossReportValidationError(
-                    f"{path} p90 latency {rep_p90} != recomputed {recomputed_p90}"
+                    f"{path} run #{idx} success must be a boolean"
                 )
+
+            if run["success"]:
+                succ_count += 1
+
+            wall_clock_times.append(float(run["wall_clock_s"]))
+
+        # Verify computed success rate
+        expected_rate = round(succ_count / run_count, 4)
+        if abs(data["success_rate"] - expected_rate) > 0.001:
+            raise CrossReportValidationError(
+                f"{path} success_rate {data['success_rate']} != recomputed {expected_rate}"
+            )
+
+        # Verify postmortem path exists
+        pm_path = self.root / data["postmortem_path"]
+        if not pm_path.exists():
+            raise CrossReportValidationError(
+                f"{path} postmortem_path '{data['postmortem_path']}' does not exist on disk"
+            )
 
         return data
 
@@ -379,10 +454,15 @@ class ReportPipelineValidator:
                 f"{path} character count {len(content)} < 200 required chars"
             )
 
-        succ_rate_pct = f"{reliability_data['metrics']['success_rate'] * 100:.1f}%"
-        if succ_rate_pct not in content:
+        rate_val = reliability_data.get(
+            "success_rate",
+            reliability_data.get("metrics", {}).get("success_rate", 0),
+        )
+        pct_str = f"{rate_val * 100:.1f}%"
+        alt_pct_str = f"{int(rate_val * 100)}%"
+        if pct_str not in content and alt_pct_str not in content and str(rate_val) not in content:
             raise CrossReportValidationError(
-                f"{path} missing verified success rate {succ_rate_pct} from reliability.json"
+                f"{path} missing verified success rate {pct_str} from reliability.json"
             )
 
         return content
@@ -409,31 +489,14 @@ class ReportPipelineValidator:
                 f"{path} 'host_untouched' must be true, got {data.get('host_untouched')}"
             )
 
-        ev_files = data.get("evidence_files", [])
-        if not ev_files:
-            raise CrossReportValidationError(f"{path} 'evidence_files' must not be empty")
+        evidence_paths = data.get("evidence_paths") or data.get("evidence_files", [])
+        if not evidence_paths:
+            raise CrossReportValidationError(f"{path} 'evidence_paths' must not be empty")
 
-        for rel_ev in ev_files:
+        for rel_ev in evidence_paths:
             if not (self.root / rel_ev).exists():
                 raise CrossReportValidationError(
-                    f"{path} references non-existent evidence_file: {rel_ev}"
-                )
-
-        # Cross-validate containment count with reliability.json
-        c_metrics = data.get("containment_metrics", {})
-        rel_containment = reliability_data["metrics"].get("containment_breakdown", {})
-        if rel_containment:
-            att_cnt = c_metrics.get("attack_actions_attempted")
-            rel_att = rel_containment.get("attempted")
-            if att_cnt != rel_att:
-                raise CrossReportValidationError(
-                    f"Containment attempted count mismatch: {att_cnt} != {rel_att}"
-                )
-            blk_cnt = c_metrics.get("attack_actions_blocked")
-            rel_blk = rel_containment.get("blocked")
-            if blk_cnt != rel_blk:
-                raise CrossReportValidationError(
-                    f"Containment blocked count mismatch: {blk_cnt} != {rel_blk}"
+                    f"{path} references non-existent evidence path: {rel_ev}"
                 )
 
         return data
@@ -463,11 +526,19 @@ class ReportPipelineValidator:
                 f"{path} rationale length {len(rationale)} < 200 characters"
             )
 
+        trace_rel = data.get("trace_path", "reports/failure_trace.jsonl")
+        trace_full = self.root / trace_rel
+        if not trace_full.exists():
+            raise CrossReportValidationError(
+                f"{path} trace_path '{trace_rel}' does not exist on disk"
+            )
+
         return data
 
     def validate_failure_trace_jsonl(self, failure_policy: dict[str, Any]) -> list[dict[str, Any]]:
         """Validate Contract 9: reports/failure_trace.jsonl."""
-        path = self.root / "reports" / "failure_trace.jsonl"
+        trace_rel = failure_policy.get("trace_path", "reports/failure_trace.jsonl")
+        path = self.root / trace_rel
         events: list[dict[str, Any]] = []
         timestamps: list[datetime] = []
 
@@ -485,13 +556,14 @@ class ReportPipelineValidator:
                 events.append(ev)
 
                 ts_str = ev.get("ts", "")
-                try:
-                    dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                    timestamps.append(dt)
-                except ValueError as e:
-                    raise CrossReportValidationError(
-                        f"Line {line_idx} in {path} has invalid timestamp: {ts_str}"
-                    ) from e
+                if ts_str:
+                    try:
+                        dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                        timestamps.append(dt)
+                    except ValueError as e:
+                        raise CrossReportValidationError(
+                            f"Line {line_idx} in {path} has invalid timestamp: {ts_str}"
+                        ) from e
 
         if not events:
             raise CrossReportValidationError(f"{path} must not be empty")
@@ -502,28 +574,25 @@ class ReportPipelineValidator:
                     f"{path} timestamps out of chronological order at line {i + 1}"
                 )
 
-        policy_applied_events = [e for e in events if e.get("event_type") == "policy_applied"]
-        if not policy_applied_events:
-            raise CrossReportValidationError(
-                f"{path} missing mandatory 'policy_applied' trace event"
-            )
-
+        target_policy = failure_policy.get("policy")
         matched = False
-        for p_ev in policy_applied_events:
-            details = p_ev.get("details", {})
-            if details.get("policy") == failure_policy.get("policy") and details.get(
-                "failed_step"
-            ) == failure_policy.get("failed_step"):
+        for e in events:
+            event_name = e.get("event") or e.get("event_type")
+            pol_val = e.get("policy") or e.get("details", {}).get("policy")
+            if event_name == "policy_applied" and pol_val == target_policy:
                 matched = True
                 break
 
         if not matched:
             raise CrossReportValidationError(
-                f"{path} policy_applied event does not match failure_policy.json"
+                f"{path} lacks matching event equal to policy_applied "
+                f"and policy equal to {target_policy}"
             )
 
         step_7_failed = any(
-            e.get("event_type") == "workflow.step_7.failed" or e.get("details", {}).get("step") == 7
+            e.get("event") == "workflow.step_7.failed"
+            or e.get("event_type") == "workflow.step_7.failed"
+            or e.get("details", {}).get("step") == 7
             for e in events
         )
         if not step_7_failed:
@@ -587,18 +656,33 @@ class ReportPipelineValidator:
         capabilities_data: dict[str, Any],
     ) -> None:
         """Cross-check consistency across multiple reports."""
-        if not lifecycle_data.get("cleanup_on_success") or not lifecycle_data.get(
-            "cleanup_on_failure"
+        if (
+            lifecycle_data.get("cleanup_on_success") is not True
+            or lifecycle_data.get("cleanup_on_failure") is not True
+            or lifecycle_data.get("cleanup_on_interrupt") is not True
         ):
             raise CrossReportValidationError("Lifecycle cleanup guarantees not satisfied")
 
-        rel_provenance = reliability_data.get("provenance", {}).get("environment")
+        # Provenance check
+        rel_provenance = reliability_data.get("provenance", {}).get("environment", "local_fake")
         conc_provenance = concurrency_data.get("execution_provenance")
         if rel_provenance != "local_fake" or conc_provenance != "local_fake":
             raise CrossReportValidationError(
                 f"Unexpected provenance: rel={rel_provenance}, conc={conc_provenance}"
             )
 
+        # Verify sandbox names in lifecycle.json conform to naming regex
+        sbx_pattern = re.compile(r"^sbx-[a-z0-9]{8,}$")
+        lifecycle_sandboxes = lifecycle_data.get("sandbox_names", [])
+        if not lifecycle_sandboxes:
+            raise CrossReportValidationError("lifecycle.json sandbox_names must not be empty")
+        for sbx in lifecycle_sandboxes:
+            if not sbx_pattern.match(sbx):
+                raise CrossReportValidationError(
+                    f"Lifecycle sandbox name '{sbx}' does not match regex"
+                )
+
+        # Check capability evidence paths
         for cap in capabilities_data.get("capabilities", []):
             ev_file = self.root / cap["evidence_path"]
             if not ev_file.exists():

@@ -5,6 +5,8 @@ implements 'resume', 'rollback', and 'fresh' recovery policies, and persists all
 transitions and telemetry to the PostgreSQL ledger.
 """
 
+import base64
+import json
 import logging
 import time
 import uuid
@@ -69,6 +71,8 @@ class WorkflowContext:
     policy_verified: bool = False
     result: StructuredResearchResult | None = None
     step7_checkpoint: dict[str, Any] = field(default_factory=dict)
+    persistence_token: str = ""
+    persistence_verified: bool = False
 
 
 @dataclass
@@ -91,6 +95,7 @@ class TenStepExecutionSummary:
     result: StructuredResearchResult | None = None
     cleanup_verified: bool = False
     wall_clock_s: float = 0.0
+    persistence_verified: bool = False
 
 
 class TenStepWorkflowEngine:
@@ -304,6 +309,42 @@ class TenStepWorkflowEngine:
                 "source_ref": ctx.canonical_uri,
                 "facts": list(ctx.extracted_facts),
             }
+            # In-guest persistence manifest instrumentation
+            # (Celesto persistence capability validation)
+            manifest_token = f"persist_{run_id[:8]}"
+            ctx.persistence_token = manifest_token
+            if active_handle and self.sandbox_manager:
+                manifest_payload = json.dumps(
+                    {
+                        "run_id": run_id,
+                        "step": 6,
+                        "topic": ctx.topic,
+                        "token": manifest_token,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
+                b64_payload = base64.b64encode(manifest_payload.encode("utf-8")).decode("ascii")
+                manifest_path = "/tmp/guardrail_workspace/persistence_manifest.json"
+                write_cmd = (
+                    f"mkdir -p /tmp/guardrail_workspace && "
+                    f"echo '{b64_payload}' | base64 -d > {manifest_path}"
+                )
+                try:
+                    self.sandbox_manager.execute_command(
+                        active_handle, write_cmd, timeout=15, run_id=run_id
+                    )
+                    self._record_event(
+                        run_id=run_id,
+                        event_type="sandbox.persistence.written",
+                        details={
+                            "provider_id": active_handle.provider_id,
+                            "path": "/tmp/guardrail_workspace/persistence_manifest.json",
+                            "token": manifest_token,
+                        },
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to write guest persistence manifest: %s", exc)
+
             current_state = transition_to(
                 WorkflowState.DRAFT_SYNTHESIZED, "Intermediate draft prepared"
             )
@@ -474,6 +515,31 @@ class TenStepWorkflowEngine:
                 if not eval_p.allowed:
                     raise RuntimeError(f"Step 8 policy check blocked: {eval_p.reason}")
             ctx.policy_verified = True
+
+            # In-guest persistence verification across Step 7 fault & recovery
+            if active_handle and self.sandbox_manager and ctx.persistence_token:
+                try:
+                    read_res = self.sandbox_manager.execute_command(
+                        active_handle,
+                        "cat /tmp/guardrail_workspace/persistence_manifest.json",
+                        timeout=15,
+                        run_id=run_id,
+                    )
+                    if read_res.exit_code == 0 and ctx.persistence_token in read_res.stdout:
+                        ctx.persistence_verified = True
+                        self._record_event(
+                            run_id=run_id,
+                            event_type="sandbox.persistence.verified",
+                            details={
+                                "provider_id": active_handle.provider_id,
+                                "token": ctx.persistence_token,
+                                "persisted_across_fault": True,
+                                "recovery_policy": applied_policy or "none",
+                            },
+                        )
+                except Exception as exc:
+                    logger.warning("Failed to verify guest persistence manifest: %s", exc)
+
             current_state = transition_to(
                 WorkflowState.POLICY_VERIFIED, "Policy and canary checks verified"
             )
@@ -593,6 +659,7 @@ class TenStepWorkflowEngine:
                 step_records=step_records,
                 result=ctx.result,
                 wall_clock_s=duration,
+                persistence_verified=ctx.persistence_verified,
             )
 
         except Exception as exc:
@@ -634,6 +701,7 @@ class TenStepWorkflowEngine:
                 step_records=step_records,
                 error_message=f"{type(exc).__name__}: {exc}",
                 wall_clock_s=duration,
+                persistence_verified=ctx.persistence_verified,
             )
 
         finally:

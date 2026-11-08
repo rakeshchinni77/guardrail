@@ -11,8 +11,16 @@ from app.agent.schemas import CANARY_SECRET, utcnow_iso
 from app.ledger.repository import LedgerRepository
 from app.ledger.schemas import CommandAttemptCreate, EventCreate
 from app.sandbox.client import sanitize_text
+from app.sandbox.naming import validate_sandbox_name
 
 logger = logging.getLogger(__name__)
+
+DECISION_MAP = {
+    "allow": "allow",
+    "allowed": "allow",
+    "block": "block",
+    "blocked": "block",
+}
 
 
 class CommandAuditLogger:
@@ -46,6 +54,26 @@ class CommandAuditLogger:
         {"ts": str, "sandbox_name": str, "command": str,
          "decision": str, "execution_target": "celesto_sandbox"}
         """
+        # Contract 4 strict field validation
+        if not command or not isinstance(command, str) or not command.strip():
+            raise ValueError("Command must be a non-empty string.")
+
+        norm_decision = DECISION_MAP.get(decision.lower()) if isinstance(decision, str) else None
+        if not norm_decision:
+            raise ValueError(f"Invalid decision '{decision}'. Must be 'allow' or 'block'.")
+
+        if not validate_sandbox_name(sandbox_name):
+            raise ValueError(
+                f"Invalid sandbox_name '{sandbox_name}'. "
+                "Must match convention ^sbx-[a-z0-9]{8,}$."
+            )
+
+        if execution_target != "celesto_sandbox":
+            raise ValueError(
+                f"Invalid execution_target '{execution_target}'. "
+                "Must be strictly 'celesto_sandbox'."
+            )
+
         # 1. Sanitize text and detect synthetic canary access
         sanitized_command = sanitize_text(command)
         if CANARY_SECRET in command:
@@ -57,7 +85,7 @@ class CommandAuditLogger:
             "ts": utcnow_iso(),
             "sandbox_name": sandbox_name,
             "command": sanitized_command,
-            "decision": decision,
+            "decision": norm_decision,
             "execution_target": execution_target,
         }
 

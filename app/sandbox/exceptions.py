@@ -50,3 +50,21 @@ class HostExecutionForbiddenError(SandboxError):
     """Raised when an operation attempts host-level execution fallback."""
 
     pass
+
+
+class CommandBlockedError(SandboxError):
+    """Raised to veto a command from within Celesto command-lifecycle safety hooks."""
+
+    def __init__(
+        self,
+        message: str,
+        vm_id: str | None = None,
+        command: str | None = None,
+        reason: str | None = None,
+        details: dict | None = None,
+    ) -> None:
+        super().__init__(message, details=details or {"reason": reason, "command": command})
+        self.vm_id = vm_id
+        self.command = command
+        self.reason = reason or message
+

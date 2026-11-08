@@ -46,6 +46,7 @@ class FailureTraceGenerator:
             "total_steps": 10,
             "policy": policy.value,
             "rationale": rationale,
+            "trace_path": "reports/failure_trace.jsonl",
         }
         with open(policy_path, "w", encoding="utf-8") as f:
             json.dump(policy_data, f, indent=2)
@@ -57,39 +58,56 @@ class FailureTraceGenerator:
         if self.ledger_repo:
             events = self.ledger_repo.list_events_for_run(summary.run_id)
             for ev in events:
-                trace_lines.append(
-                    {
-                        "ts": ev.timestamp.isoformat() if hasattr(ev, "timestamp") else "",
-                        "run_id": summary.run_id,
-                        "event_type": ev.event_type,
-                        "details": ev.details,
-                    }
-                )
+                entry = {
+                    "ts": ev.timestamp.isoformat() if hasattr(ev, "timestamp") else "",
+                    "run_id": summary.run_id,
+                    "event": ev.event_type,
+                    "event_type": ev.event_type,
+                    "details": ev.details,
+                }
+                if ev.event_type == "policy_applied" and isinstance(ev.details, dict):
+                    if "policy" in ev.details:
+                        entry["policy"] = ev.details["policy"]
+                    if "failed_step" in ev.details:
+                        entry["failed_step"] = ev.details["failed_step"]
+                trace_lines.append(entry)
 
         # Fallback to step records if no db events
         if not trace_lines:
             for s in summary.step_records:
+                status_suffix = "completed" if s.status == "completed" else "failed"
+                ev_name = f"workflow.step_{s.step}.{status_suffix}"
                 trace_lines.append(
                     {
                         "ts": s.timestamp,
                         "run_id": summary.run_id,
+                        "event": ev_name,
+                        "event_type": ev_name,
                         "step": s.step,
                         "step_name": s.step_name,
                         "status": s.status,
                         "from_state": s.from_state,
                         "to_state": s.to_state,
                         "error": s.error,
+                        "details": {"step": s.step, "step_name": s.step_name, "error": s.error},
                     }
                 )
             if summary.recovery_policy_applied:
                 trace_lines.append(
                     {
                         "run_id": summary.run_id,
+                        "event": "policy_applied",
                         "event_type": "policy_applied",
                         "policy": summary.recovery_policy_applied,
                         "failed_step": 7,
                         "total_steps": 10,
                         "rationale": rationale,
+                        "details": {
+                            "policy": summary.recovery_policy_applied,
+                            "failed_step": 7,
+                            "total_steps": 10,
+                            "rationale": rationale,
+                        },
                     }
                 )
 

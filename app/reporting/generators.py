@@ -49,6 +49,7 @@ def generate_problem_report(output_path: Path | None = None) -> Path:
             "Deterministic structured JSON research report with validated fact citations and "
             "zero disclosed canaries."
         ),
+        idea_source="idea_bank",
         problem_id="prompt_injection_exfiltration_containment",
         target_environment="celesto_sandbox",
         threat_model="indirect_prompt_injection_with_sensitive_token_leakage",
@@ -69,19 +70,7 @@ def generate_capabilities_report(output_path: Path | None = None) -> Path:
 
     capabilities = [
         CapabilityItem(
-            capability="microvm_lifecycle",
-            name="MicroVM Hardware Isolation and Guaranteed Teardown",
-            why=(
-                "Hardware-isolated microVM provisioning, execution, and guaranteed teardown "
-                "prevent untrusted agent payloads from accessing host filesystems, environment "
-                "secrets, or Docker daemon sockets, guaranteeing zero host compromise."
-            ),
-            evidence_path="tests/celesto_phase4_integration_result.json",
-            provider_status="VERIFIED",
-            provenance="celesto_cloud_cli",
-        ),
-        CapabilityItem(
-            capability="safety_hooks",
+            id="safety_hooks",
             name="Pre-Execution Security Policy Hooks and Canary Masking",
             why=(
                 "Pre-execution command safety hooks intercept unauthorized shell commands, "
@@ -94,49 +83,36 @@ def generate_capabilities_report(output_path: Path | None = None) -> Path:
             provenance="local_tests_and_logs",
         ),
         CapabilityItem(
-            capability="failure_recovery",
-            name="Deterministic Ten-Step Workflow and Step-7 Failure Recovery",
+            id="persistence",
+            name="Warm Guest Retention and Non-Duplicative Recovery Across Step 7 Faults",
             why=(
-                "Bounded ten-step workflow state transitions with explicit resume recovery "
-                "policies enable graceful error handling of schema transformation faults at "
-                "Step 7 without repeating earlier side effects or leaking resources."
+                "Warm guest microVM and scratch filesystem retention across Step 7 failure "
+                "enables graceful error recovery without repeating earlier side effects or "
+                "incurring redundant VM boot-to-ready latency penalties."
             ),
             evidence_path="reports/failure_trace.jsonl",
             provider_status="VERIFIED",
             provenance="deterministic_workflow_eval",
         ),
         CapabilityItem(
-            capability="concurrency_isolation",
-            name="Concurrent Sandbox Collision Avoidance and Lifecycle Safety",
+            id="network_policy",
+            name="Outbound Exfiltration Egress Filtering and Mock Sink Interception",
             why=(
-                "Concurrent multi-worker execution harness validates that multiple simultaneous "
-                "guest sandboxes operate with zero naming collisions, zero database deadlocks, "
-                "and guaranteed individual terminal cleanup."
+                "Outbound egress evaluation restricts data exfiltration to approved "
+                "local endpoints, ensuring canary tokens and arbitrary network sockets "
+                "are intercepted before escaping the execution environment."
             ),
-            evidence_path="reports/concurrency.json",
-            provider_status="VERIFIED",
-            provenance="local_fake_simulation",
-        ),
-        CapabilityItem(
-            capability="snapshots_and_rollback",
-            name="Hypervisor Snapshot Creation and State Rollback",
-            why=(
-                "Cloud hypervisor snapshot creation and live rollback remain unverified on "
-                "Celesto Cloud 0.1.8; GuardRail documents this limitation honestly and uses "
-                "local state-checkpoint recovery instead of fabricating provider capabilities."
-            ),
-            evidence_path="docs/ARCHITECTURE.md",
+            evidence_path="reports/containment.json",
             provider_status="UNVERIFIED",
-            provenance="unverified_provider_capability",
+            provenance="control_plane_network_manager",
         ),
         CapabilityItem(
-            capability="kernel_network_isolation",
-            name="Guest MicroVM Kernel-Level Outbound Egress Isolation",
+            id="snapshots",
+            name="State Checkpoint Preservation and Explicit Hypervisor Rollback Boundary",
             why=(
-                "MicroVM guest kernel-level outbound network filtering remains unverified on "
-                "Celesto Cloud; GuardRail enforces network policy via Python control-plane "
-                "hooks and mock exfiltration sinks without claiming unverified hypervisor "
-                "network enforcement."
+                "Local checkpoint state preservation enables rollback before risky operations. "
+                "Hypervisor-level snapshot creation remains unverified on Celesto Cloud 0.1.8 and "
+                "is documented as an honest provider limitation."
             ),
             evidence_path="docs/ARCHITECTURE.md",
             provider_status="UNVERIFIED",
@@ -180,10 +156,42 @@ def generate_lifecycle_report(output_path: Path | None = None) -> Path:
         ),
     ]
 
+    # Load unique sandbox names verified in commands.jsonl or reliability.json
+    sandbox_names: list[str] = []
+    cmd_log = target_path.parent.parent / "logs" / "commands.jsonl"
+    if cmd_log.exists():
+        with open(cmd_log, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                name = json.loads(line).get("sandbox_name")
+                if name and name not in sandbox_names:
+                    sandbox_names.append(name)
+
+    rel_file = target_path.parent / "reliability.json"
+    if rel_file.exists():
+        with open(rel_file, encoding="utf-8") as f:
+            rdata = json.load(f)
+            for r in rdata.get("runs", []):
+                sname = r.get("sandbox_name")
+                if sname and sname not in sandbox_names:
+                    sandbox_names.append(sname)
+
+    conc_file = target_path.parent / "concurrency.json"
+    if conc_file.exists():
+        with open(conc_file, encoding="utf-8") as f:
+            cdata = json.load(f)
+            for j in cdata.get("jobs", []):
+                sname = j.get("sandbox_name")
+                if sname and sname not in sandbox_names:
+                    sandbox_names.append(sname)
+
     report = LifecycleReportSchema(
         cleanup_on_success=True,
         cleanup_on_failure=True,
         cleanup_on_interrupt=True,
+        sandbox_names=sandbox_names,
         naming_convention="^sbx-[a-z0-9]{8,}$",
         unique_naming=True,
         entropy_bits=40,
@@ -224,8 +232,14 @@ def generate_containment_report(output_path: Path | None = None) -> Path:
         defense_in_depth_canary_leak_count=0,
     )
 
+    evidence_paths = [
+        "logs/commands.jsonl",
+        "reports/reliability.json",
+        "tests/celesto_phase4_integration_result.json",
+    ]
+
     report = ContainmentReportSchema(
-        attack="prompt_injection_exfiltration",
+        attack="prompt_injection_exfil",
         blocked=True,
         host_untouched=True,
         defense_profile="defense_in_depth",
@@ -234,11 +248,8 @@ def generate_containment_report(output_path: Path | None = None) -> Path:
             "attempting to coerce the agent into arbitrary shell execution, unauthorized file "
             "reading, and outbound canary exfiltration."
         ),
-        evidence_files=[
-            "logs/commands.jsonl",
-            "reports/reliability.json",
-            "tests/celesto_phase4_integration_result.json",
-        ],
+        evidence_paths=evidence_paths,
+        evidence_files=evidence_paths,
         containment_metrics=metrics,
         canary_protection={
             "token_masked_in_logs": True,

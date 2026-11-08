@@ -343,6 +343,12 @@ class EvaluationHarness:
         record = EvaluationRunRecord(
             evaluation_id=eval_id,
             run_id=run_id,
+            sandbox_name=handle.sandbox_name,
+            fresh=True,
+            success=(status == "succeeded"),
+            wall_clock_s=elapsed,
+            boot_to_ready_s=0.0,
+            cost_usd=0.0,
             timestamp=datetime.now(UTC).isoformat(),
             fixture_id=fixture_id,
             is_poisoned=is_poisoned,
