@@ -1,6 +1,7 @@
 """Pytest fixtures and configuration for GuardRail test suite."""
 
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.agent.audit import CommandAuditLogger
 from app.ledger.database import Base, get_db
 from app.ledger.models import Run
 from app.main import app
@@ -64,3 +66,17 @@ def fixture_client(db_session: Session) -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def redirect_test_command_audit_logger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Redirect test-generated command logs to a temporary file to preserve tracked evidence."""
+    test_log_file = tmp_path / "test_commands.jsonl"
+    orig_init = CommandAuditLogger.__init__
+
+    def patched_init(self, log_file_path: Path | None = None, ledger_repo=None) -> None:
+        effective_path = log_file_path or test_log_file
+        orig_init(self, log_file_path=effective_path, ledger_repo=ledger_repo)
+
+    monkeypatch.setattr(CommandAuditLogger, "__init__", patched_init)
+
